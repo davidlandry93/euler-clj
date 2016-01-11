@@ -57,7 +57,7 @@
   (assoc game-map
          :tiles
          (->> (:tiles game-map)
-              (map (fn [x] (assoc x :cost Double/POSITIVE_INFINITY :predecessor nil)))
+              (map (fn [x] (assoc x :cost Double/POSITIVE_INFINITY :predecessor nil :visited false)))
               (into []))))
 
 (defn initialized-map
@@ -72,36 +72,60 @@
         destination-tile (get (:tiles game-map) (index-of-coordinates destination game-map))
         new-cost (+ (:cost origin-tile) (cost destination game-map))]
     (if (< new-cost (:cost destination-tile))
-      (assoc-in game-map
-                [:tiles (index-of-coordinates destination game-map)]
-                {:cost new-cost :predecessor origin})
+      (-> game-map
+          (assoc-in [:tiles (index-of-coordinates destination game-map) :cost] new-cost)
+          (assoc-in [:tiles (index-of-coordinates destination game-map) :predecessor] origin))
       game-map)))
 
 (defn map-with-node-visited
   [coords game-map]
-  (reduce (fn [acc neighbor] (map-with-neighbor-updated coords neighbor acc))
-          game-map
-          (neighbors coords game-map)))
+  (->> (neighbors coords game-map)
+       (reduce (fn [acc neighbor] (map-with-neighbor-updated coords neighbor acc)) game-map)
+       (#(assoc-in % [:tiles (index-of-coordinates coords %) :visited] true))))
 
 (defn cost-coord-pairs-of-map
+  "Returns a list of pairs of coordinates and cost to traverse the said coords. If a node
+  is already visited it is considered impassable."
   [game-map]
   (->> (:tiles game-map)
-       (map-indexed (fn [i x] {:cost (:cost x) :coords (coords-of-index i game-map)}))
+       (map-indexed
+        (fn [i x]
+          {:cost (if (:visited x) Double/POSITIVE_INFINITY (:cost x))
+           :coords (coords-of-index i game-map)}))
        (into [])))
+
+(defn arg-min
+  "Returns the argument such that f is minimal."
+  [f args]
+  (reduce (fn [acc arg] (if (< (f arg) (f acc)) arg acc))
+          nil
+          args))
+
+(defn next-node-to-visit
+  [game-map]
+  (->> (cost-coord-pairs-of-map game-map)
+       (arg-min (fn [x]
+                  (if (nil? x) Double/POSITIVE_INFINITY (:cost x))))
+       (:coords)))
 
 (defn dijkstra-map
   [source game-map]
-  (let [augmented-map (initialized-map source game-map)]))
+  (let [augmented-map (initialized-map source game-map)]
+    (loop [current-map augmented-map]
+      (let [next-node (next-node-to-visit current-map)]
+        (if (nil? next-node)
+          current-map
+          (->> (next-node-to-visit current-map)
+               (#(map-with-node-visited % current-map))
+               (recur)))))))
 
-(defn dijksta-predecessors
-  [source game-map]
-  (let [augmented-tiles-coll
-        (assoc
-         (->>
-          (:tiles game-map)
-          (map (fn [x] (assoc x :cost Double/POSITIVE_INFINITY :predecessor nil)))
-          (into []))
-         (index-of-coordinates source game-map)
-         (assoc (nth (:tiles game-map) (index-of-coordinates source game-map)) :cost 0 :predecessor nil))
-         ]
-    augmented-tiles-coll))
+(defn path-to-node
+  [destination dijkstraized-map]
+  (let [tiles (:tiles dijkstraized-map)]
+    (loop [path [destination]]
+      (let [predecessor (:predecessor
+                         (get tiles
+                              (index-of-coordinates (first path) dijkstraized-map)))]
+        (if (nil? predecessor)
+          path
+          (recur (list* predecessor path)))))))
