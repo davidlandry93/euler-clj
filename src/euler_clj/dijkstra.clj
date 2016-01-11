@@ -33,8 +33,8 @@
         di (- (first tile2) (first tile1))
         dj (- (last tile2) (last tile1))]
     (and
-     (= 1 (+ (Math/abs di) (Math/abs dj)))
-     (not (= 0 (cost tile2 game-map)))
+     (= 1 (+ (Math/abs di) (Math/abs dj))) ; tile is neighboring
+     (not (= 0 (cost tile2 game-map))) ; tile is not marked as impassable
      (<= 0 i2)
      (<= 0 j2)
      (> (:height game-map) i2)
@@ -104,8 +104,7 @@
 (defn next-node-to-visit
   [game-map]
   (->> (cost-coord-pairs-of-map game-map)
-       (arg-min (fn [x]
-                  (if (nil? x) Double/POSITIVE_INFINITY (:cost x))))
+       (arg-min (fn [x] (if (nil? x) Double/POSITIVE_INFINITY (:cost x))))
        (:coords)))
 
 (defn dijkstra-map
